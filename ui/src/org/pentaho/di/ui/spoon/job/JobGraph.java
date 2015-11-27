@@ -98,11 +98,11 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.extension.ExtensionPointHandler;
 import org.pentaho.di.core.extension.KettleExtensionPoint;
 import org.pentaho.di.core.gui.AreaOwner;
+import org.pentaho.di.core.gui.AreaOwner.AreaType;
 import org.pentaho.di.core.gui.GCInterface;
 import org.pentaho.di.core.gui.Point;
 import org.pentaho.di.core.gui.Redrawable;
 import org.pentaho.di.core.gui.SnapAllignDistribute;
-import org.pentaho.di.core.gui.AreaOwner.AreaType;
 import org.pentaho.di.core.logging.HasLogChannelInterface;
 import org.pentaho.di.core.logging.KettleLogStore;
 import org.pentaho.di.core.logging.LogChannel;
@@ -154,7 +154,6 @@ import org.pentaho.di.ui.spoon.TabMapEntry;
 import org.pentaho.di.ui.spoon.TabMapEntry.ObjectType;
 import org.pentaho.di.ui.spoon.XulSpoonResourceBundle;
 import org.pentaho.di.ui.spoon.XulSpoonSettingsManager;
-import org.pentaho.di.ui.spoon.dialog.DeleteMessageBox;
 import org.pentaho.di.ui.spoon.dialog.NotePadDialog;
 import org.pentaho.di.ui.spoon.trans.DelayListener;
 import org.pentaho.di.ui.spoon.trans.DelayTimer;
@@ -1209,7 +1208,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
       switch ( areaOwner.getAreaType() ) {
         case JOB_ENTRY_ICON:
           JobEntryCopy jobEntryCopy = (JobEntryCopy) areaOwner.getOwner();
-          if ( !mouseOverEntries.contains( jobEntryCopy ) ) {
+          if ( !jobEntryCopy.isMissing() && !mouseOverEntries.contains( jobEntryCopy ) ) {
             addEntryMouseOverDelayTimer( jobEntryCopy );
             redraw();
             tip = false;
@@ -1262,9 +1261,22 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
       }
 
       if ( checkIfHopAlreadyExists( jobMeta, hop_candidate ) ) {
+        boolean cancel = false;
         jobMeta.addJobHop( hop_candidate );
-        spoon.addUndoNew( jobMeta, new JobHopMeta[] { hop_candidate }, new int[] { jobMeta
-          .indexOfJobHop( hop_candidate ) } );
+        if ( jobMeta.hasLoop( hop_candidate.getFromEntry() ) || jobMeta.hasLoop( hop_candidate.getToEntry() ) ) {
+          MessageBox mb = new MessageBox( spoon.getShell(), SWT.OK | SWT.CANCEL | SWT.ICON_WARNING );
+          mb.setMessage( BaseMessages.getString( PKG, "JobGraph.Dialog.HopCausesLoop.Message" ) );
+          mb.setText( BaseMessages.getString( PKG, "JobGraph.Dialog.HopCausesLoop.Title" ) );
+          int choice = mb.open();
+          if ( choice == SWT.CANCEL ) {
+            jobMeta.removeJobHop( hop_candidate );
+            cancel = true;
+          }
+        }
+        if ( !cancel ) {
+          spoon.addUndoNew( jobMeta, new JobHopMeta[] { hop_candidate }, new int[] { jobMeta
+            .indexOfJobHop( hop_candidate ) } );
+        }
         spoon.refreshTree();
         clearSettings();
         redraw();
@@ -1540,32 +1552,21 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
   }
 
   public void delSelected() {
+    delSelected( getJobEntry() );
+  }
+
+  public void delSelected( JobEntryCopy clickedEntry ) {
     List<JobEntryCopy> copies = jobMeta.getSelectedEntries();
     int nrsels = copies.size();
     if ( nrsels == 0 ) {
+      if ( clickedEntry != null ) {
+        spoon.deleteJobEntryCopies( jobMeta, clickedEntry );
+      }
       return;
     }
 
-    // Load the list of steps
-    //
-    List<String> stepList = new ArrayList<String>();
-    for ( int i = 0; i < copies.size(); ++i ) {
-      stepList.add( copies.get( i ).toString() );
-    }
-
-    // Display the delete confirmation message box
-    MessageBox mb =
-      new DeleteMessageBox(
-        shell, BaseMessages.getString( PKG, "Spoon.Dialog.DeletionConfirm.Message" ), stepList );
-    int answer = mb.open();
-    if ( answer == SWT.YES ) {
-      // Perform the delete
-      for ( int i = 0; i < copies.size(); i++ ) {
-        spoon.deleteJobEntryCopies( jobMeta, copies.get( i ) );
-      }
-      spoon.refreshTree();
-      spoon.refreshGraph();
-    }
+    JobEntryCopy[] jobEntries = copies.toArray( new JobEntryCopy[copies.size()] );
+    spoon.deleteJobEntryCopies( jobMeta, jobEntries );
   }
 
   public void clearSettings() {
@@ -1808,7 +1809,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
   }
 
   public void deleteEntry() {
-    spoon.deleteJobEntryCopies( jobMeta, getJobEntry() );
+    delSelected();
     redraw();
   }
 
@@ -1826,6 +1827,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
       XulMenupopup menu = (XulMenupopup) doc.getElementById( "job-graph-entry" );
       if ( menu != null ) {
         List<JobEntryCopy> selection = jobMeta.getSelectedEntries();
+        doRightClickSelection( jobEntry, selection );
         int sels = selection.size();
 
         XulMenuitem item = (XulMenuitem) doc.getElementById( "job-graph-entry-newhop" );
@@ -1857,8 +1859,7 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
         item = (XulMenuitem) doc.getElementById( "job-graph-entry-align-snap" );
 
         item.setAcceltext( "ALT-HOME" );
-        item.setLabel( BaseMessages.getString( PKG, "JobGraph.PopupMenu.JobEntry.AllignDistribute.SnapToGrid" )
-          + ConstUI.GRID_SIZE + ")" );
+        item.setLabel( BaseMessages.getString( PKG, "JobGraph.PopupMenu.JobEntry.AllignDistribute.SnapToGrid" ) );
         item.setAccesskey( "alt-home" );
 
         XulMenu aMenu = (XulMenu) doc.getElementById( "job-graph-entry-align" );
@@ -2058,32 +2059,45 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
 
   public void flipHop() {
     selectionRegion = null;
-    JobEntryCopy dummy = currentHop.getFromEntry();
+    JobEntryCopy origFrom = currentHop.getFromEntry();
+    JobEntryCopy origTo = currentHop.getToEntry();
     currentHop.setFromEntry( currentHop.getToEntry() );
-    currentHop.setToEntry( dummy );
+    currentHop.setToEntry( origFrom );
 
-    if ( jobMeta.hasLoop( currentHop.getFromEntry() ) ) {
-      spoon.refreshGraph();
-      MessageBox mb = new MessageBox( shell, SWT.YES | SWT.ICON_WARNING );
+    boolean cancel = false;
+    if ( jobMeta.hasLoop( currentHop.getFromEntry() ) || jobMeta.hasLoop( currentHop.getToEntry() ) ) {
+      MessageBox mb = new MessageBox( shell, SWT.OK | SWT.CANCEL | SWT.ICON_WARNING );
       mb.setMessage( BaseMessages.getString( PKG, "JobGraph.Dialog.HopFlipCausesLoop.Message" ) );
-      mb.setText( BaseMessages.getString( PKG, "JobGraph.Dialog.HopFlipCausesLoop.Title" ) );
-      mb.open();
-
-      dummy = currentHop.getFromEntry();
-      currentHop.setFromEntry( currentHop.getToEntry() );
-      currentHop.setToEntry( dummy );
-      spoon.refreshGraph();
-    } else {
-      currentHop.setChanged();
-      spoon.refreshGraph();
-      spoon.refreshTree();
-      spoon.setShellText();
+      mb.setText( BaseMessages.getString( PKG, "JobGraph.Dialog.HopCausesLoop.Title" ) );
+      int choice = mb.open();
+      if ( choice == SWT.CANCEL ) {
+        cancel = true;
+        currentHop.setFromEntry( origFrom );
+        currentHop.setToEntry( origTo );
+      }
     }
+    if ( !cancel ) {
+      currentHop.setChanged();
+    }
+    spoon.refreshGraph();
+    spoon.refreshTree();
+    spoon.setShellText();
   }
 
   public void disableHop() {
     selectionRegion = null;
+    boolean orig = currentHop.isEnabled();
     currentHop.setEnabled( !currentHop.isEnabled() );
+
+    if ( !orig && ( jobMeta.hasLoop( currentHop.getFromEntry() ) || jobMeta.hasLoop( currentHop.getToEntry() ) ) ) {
+      MessageBox mb = new MessageBox( shell, SWT.CANCEL | SWT.OK | SWT.ICON_WARNING );
+      mb.setMessage( BaseMessages.getString( PKG, "JobGraph.Dialog.LoopAfterHopEnabled.Message" ) );
+      mb.setText( BaseMessages.getString( PKG, "JobGraph.Dialog.LoopAfterHopEnabled.Title" ) );
+      int choice = mb.open();
+      if ( choice == SWT.CANCEL ) {
+        currentHop.setEnabled( orig );
+      }
+    }
     spoon.refreshGraph();
     spoon.refreshTree();
   }
@@ -2136,6 +2150,8 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
   public void enableHopsBetweenSelectedEntries( boolean enabled ) {
     List<JobEntryCopy> list = jobMeta.getSelectedEntries();
 
+    boolean hasLoop = false;
+
     for ( int i = 0; i < jobMeta.nrJobHops(); i++ ) {
       JobHopMeta hop = jobMeta.getJobHop( i );
       if ( list.contains( hop.getFromEntry() ) && list.contains( hop.getToEntry() ) ) {
@@ -2145,7 +2161,17 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
         JobHopMeta after = (JobHopMeta) hop.clone();
         spoon.addUndoChange( jobMeta, new JobHopMeta[] { before }, new JobHopMeta[] { after }, new int[] { jobMeta
           .indexOfJobHop( hop ) } );
+        if ( jobMeta.hasLoop( hop.getFromEntry() ) || jobMeta.hasLoop( hop.getToEntry() ) ) {
+          hasLoop = true;
+        }
       }
+    }
+
+    if ( hasLoop && enabled ) {
+      MessageBox mb = new MessageBox( shell, SWT.OK | SWT.ICON_WARNING );
+      mb.setMessage( BaseMessages.getString( PKG, "JobGraph.Dialog.LoopAfterHopEnabled.Message" ) );
+      mb.setText( BaseMessages.getString( PKG, "JobGraph.Dialog.LoopAfterHopEnabled.Title" ) );
+      mb.open();
     }
 
     spoon.refreshGraph();
@@ -2745,14 +2771,11 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
       e.gc.setBackground( GUIResource.getInstance().getColorBackground() );
       e.gc.setFont( GUIResource.getInstance().getFontMedium() );
 
-      String message = BaseMessages.getString( PKG, "JobGraph.EmptyJob.Message" );
-      Image pentahoImage = GUIResource.getInstance().getImageDropHere();
-      org.eclipse.swt.graphics.Point messageSize = e.gc.textExtent( message );
-      int leftPosition = ( area.x - messageSize.x - pentahoImage.getBounds().width - 10 ) / 2;
-      int topPosition = ( area.y - messageSize.y ) / 2;
-      e.gc.drawText( message, leftPosition, topPosition );
-      e.gc.drawImage( pentahoImage, leftPosition - pentahoImage.getBounds().width - 10, topPosition
-        + messageSize.y / 2 - pentahoImage.getBounds().height / 2 );
+      Image pentahoImage = GUIResource.getInstance().getImageJobCanvas();
+      int leftPosition = ( area.x - pentahoImage.getBounds().width ) / 2;
+      int topPosition = ( area.y - pentahoImage.getBounds().height ) / 2;
+      e.gc.drawImage( pentahoImage, leftPosition, topPosition );
+
     }
     img.dispose();
 
@@ -2761,11 +2784,14 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
   public Image getJobImage( Device device, int x, int y, float magnificationFactor ) {
     GCInterface gc = new SWTGC( device, new Point( x, y ), iconsize );
 
+    int gridSize =
+        PropsUI.getInstance().isShowCanvasGridEnabled() ? PropsUI.getInstance().getCanvasGridSize() : 1;
+
     JobPainter jobPainter =
       new JobPainter(
         gc, jobMeta, new Point( x, y ), new SwtScrollBar( hori ), new SwtScrollBar( vert ), hop_candidate,
         drop_candidate, selectionRegion, areaOwners, mouseOverEntries, PropsUI.getInstance().getIconSize(),
-        PropsUI.getInstance().getLineWidth(), PropsUI.getInstance().getCanvasGridSize(), PropsUI
+        PropsUI.getInstance().getLineWidth(), gridSize, PropsUI
           .getInstance().getShadowSize(), PropsUI.getInstance().isAntiAliasingEnabled(), PropsUI
           .getInstance().getNoteFont().getName(), PropsUI.getInstance().getNoteFont().getHeight() );
 
@@ -3321,7 +3347,9 @@ public class JobGraph extends AbstractGraph implements XulEventHandler, Redrawab
     spoon.getSQL();
   }
 
-  public XulToolbar getToolbar() { return toolbar; }
+  public XulToolbar getToolbar() {
+    return toolbar;
+  }
 
   public void exploreDatabase() {
     spoon.exploreDatabase();

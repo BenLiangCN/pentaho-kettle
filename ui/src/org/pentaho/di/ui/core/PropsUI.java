@@ -95,6 +95,8 @@ public class PropsUI extends Props {
 
   private static final String CANVAS_GRID_SIZE = "CanvasGridSize";
 
+  private static final String LEGACY_PERSPECTIVE_MODE = "LegacyPerspectiveMode";
+
   private static List<GUIOption<Object>> editables;
 
   /**
@@ -182,9 +184,22 @@ public class PropsUI extends Props {
     List<PluginInterface> plugins = registry.getPlugins( LifecyclePluginType.class );
     List<GUIOption<Object>> leditables = new ArrayList<GUIOption<Object>>();
     for ( PluginInterface plugin : plugins ) {
+      if ( !plugin.getClassMap().keySet().contains( GUIOption.class ) ) {
+        continue;
+      }
+
       try {
-        leditables.add( registry.loadClass( plugin, GUIOption.class ) );
-      } catch ( Exception e ) {
+        GUIOption<Object> loaded = registry.loadClass( plugin, GUIOption.class );
+        if ( loaded != null ) {
+          leditables.add( loaded );
+        }
+      }
+      catch( ClassCastException cce ) {
+        // Not all Lifecycle plugins implement GUIOption, keep calm and carry on
+        LogChannel.GENERAL.logBasic(
+          "Plugin "+plugin.getIds()[0] + " does not implement GUIOption, it will not be editable" );
+      }
+      catch ( Exception e ) {
         LogChannel.GENERAL.logError( "Unexpected error loading class for plugin " + plugin.getName(), e );
       }
     }
@@ -751,23 +766,6 @@ public class PropsUI extends Props {
     return new int[] { w1, w2 };
   }
 
-  public void setTipNr( int nr ) {
-    properties.setProperty( STRING_TIP_NR, "" + nr );
-  }
-
-  public int getTipNr() {
-    return Const.toInt( properties.getProperty( STRING_TIP_NR ), 0 );
-  }
-
-  public void setShowTips( boolean show ) {
-    properties.setProperty( STRING_SHOW_TIPS, show ? YES : NO );
-  }
-
-  public boolean showTips() {
-    String show = properties.getProperty( STRING_SHOW_TIPS );
-    return !NO.equalsIgnoreCase( show );
-  }
-
   public void setOpenLastFile( boolean open ) {
     properties.setProperty( STRING_OPEN_LAST_FILE, open ? YES : NO );
   }
@@ -829,6 +827,15 @@ public class PropsUI extends Props {
 
   public void setAntiAliasingEnabled( boolean anti ) {
     properties.setProperty( STRING_ANTI_ALIASING, anti ? YES : NO );
+  }
+  
+  public boolean isShowCanvasGridEnabled() {
+    String showCanvas = properties.getProperty( STRING_SHOW_CANVAS_GRID, NO );
+    return YES.equalsIgnoreCase( showCanvas ); // Default: don't show canvas grid
+  }
+
+  public void setShowCanvasGridEnabled( boolean anti ) {
+    properties.setProperty( STRING_SHOW_CANVAS_GRID, anti ? YES : NO );
   }
 
   public boolean showExitWarning() {
@@ -903,7 +910,10 @@ public class PropsUI extends Props {
         CTabFolder tabFolder = (CTabFolder) control;
         tabFolder.setSimple( false );
         tabFolder.setBorderVisible( true );
-        tabFolder.setSelectionBackground( GUIResource.getInstance().getColorTab() );
+        // need to make a copy of the tab selection background color to get around PDI-13940
+        Color c = GUIResource.getInstance().getColorTab();
+        Color tabColor = new Color( c.getDevice(), c.getRed(), c.getGreen(), c.getBlue() );
+        tabFolder.setSelectionBackground( tabColor );
         break;
       default:
         background = gui.getColorBackground();
@@ -1078,11 +1088,15 @@ public class PropsUI extends Props {
   }
 
   public int getCanvasGridSize() {
-    return Const.toInt( properties.getProperty( CANVAS_GRID_SIZE, "1" ), 1 );
+    return Const.toInt( properties.getProperty( CANVAS_GRID_SIZE, "16" ), 16 );
   }
 
   public void setCanvasGridSize( int gridSize ) {
     properties.setProperty( CANVAS_GRID_SIZE, Integer.toString( gridSize ) );
+  }
+
+  public boolean isLegacyPerspectiveMode() {
+    return "Y".equalsIgnoreCase( properties.getProperty( LEGACY_PERSPECTIVE_MODE, "N" ) );
   }
 
   public static void setLocation( GUIPositionInterface guiElement, int x, int y ) {

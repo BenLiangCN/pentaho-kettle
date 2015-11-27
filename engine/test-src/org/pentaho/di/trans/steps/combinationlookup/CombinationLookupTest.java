@@ -34,7 +34,6 @@ import org.pentaho.di.trans.step.StepPartitioningMeta;
 
 import java.sql.Connection;
 
-import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.*;
@@ -45,10 +44,11 @@ public class CombinationLookupTest {
   private StepMeta stepMeta;
 
   private CombinationLookup combinationLookup, combinationLookupSpy;
-  private CombinationLookupMeta combinationLookupMeta, combinationLookupMetaSpy;
-  private CombinationLookupData combinationLookupData, combinationLookupDataSpy;
+  private CombinationLookupMeta combinationLookupMeta;
+  private CombinationLookupData combinationLookupData;
 
-  @Before public void setup() {
+  @Before
+  public void setup() {
     databaseMeta = mock( DatabaseMeta.class );
     doReturn( "" ).when( databaseMeta ).quoteField( anyString() );
 

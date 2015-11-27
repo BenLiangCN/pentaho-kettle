@@ -678,7 +678,7 @@ public class TransPainter extends BasePainter {
     String name = stepMeta.getName();
 
     if ( stepMeta.isSelected() ) {
-      gc.setLineWidth( linewidth + 1 );
+      gc.setLineWidth( linewidth + 2 );
     } else {
       gc.setLineWidth( linewidth );
     }
@@ -691,7 +691,7 @@ public class TransPainter extends BasePainter {
     gc.setBackground( EColor.BACKGROUND );
     gc.fillRoundRectangle( x - 1, y - 1, iconsize + 1, iconsize + 1, 8, 8 );
     gc.drawStepIcon( x, y, stepMeta, magnification );
-    if ( stepError ) {
+    if ( stepError || stepMeta.isMissing() ) {
       gc.setForeground( EColor.RED );
     } else {
       gc.setForeground( EColor.CRYSTAL );

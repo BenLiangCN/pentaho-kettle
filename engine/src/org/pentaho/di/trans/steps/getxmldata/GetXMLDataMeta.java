@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.vfs.FileObject;
+import org.apache.commons.vfs2.FileObject;
 import org.pentaho.di.core.CheckResult;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -1259,4 +1259,8 @@ public class GetXMLDataMeta extends BaseStepMeta implements StepMetaInterface {
     return new GetXMLDataMetaInjection( this );
   }
 
+  @Override
+  public TransMeta.TransformationType[] getSupportedTransformationTypes() {
+      return new TransMeta.TransformationType[] { TransMeta.TransformationType.Normal };
+  }
 }

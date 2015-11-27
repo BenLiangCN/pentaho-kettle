@@ -30,7 +30,7 @@ import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.vfs.FileObject;
+import org.apache.commons.vfs2.FileObject;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.ResultFile;
 import org.pentaho.di.core.WriterOutputStream;
@@ -647,7 +647,8 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         }
 
         if ( log.isDetailed() ) {
-          logDetailed( "Opened new file with name [" + filename + "]" );
+          logDetailed( "Opened new file with name ["
+              + KettleVFS.getFriendlyURI( filename ) + "]" );
         }
       }
     } catch ( Exception e ) {
@@ -668,7 +669,7 @@ public class TextFileOutput extends BaseStep implements StepInterface {
     }
   }
 
-  private boolean closeFile() {
+  protected boolean closeFile() {
     boolean retval = false;
 
     try {
@@ -715,8 +716,9 @@ public class TextFileOutput extends BaseStep implements StepInterface {
         if ( log.isDebug() ) {
           logDebug( "Closing normal file ..." );
         }
-        data.out.close();
-
+        if ( data.out != null ) {
+          data.out.close();
+        }
         if ( data.fos != null ) {
           data.fos.close();
           data.fos = null;
@@ -755,7 +757,9 @@ public class TextFileOutput extends BaseStep implements StepInterface {
 
           data.oneFileOpened = true;
         } catch ( Exception e ) {
-          logError( "Couldn't open file " + meta.getFileName(), e );
+          logError( "Couldn't open file "
+              + KettleVFS.getFriendlyURI(getParentVariableSpace().environmentSubstitute( meta.getFileName() ) )
+              + "." + getParentVariableSpace().environmentSubstitute( meta.getExtension() ), e );
           setErrors( 1L );
           stopAll();
         }
@@ -953,22 +957,23 @@ public class TextFileOutput extends BaseStep implements StepInterface {
       parentfolder = getFileObject( filename ).getParent();
       if ( parentfolder.exists() ) {
         if ( isDetailed() ) {
-          logDetailed( BaseMessages.getString( PKG, "TextFileOutput.Log.ParentFolderExist", parentfolder.getName() ) );
+          logDetailed( BaseMessages.getString( PKG, "TextFileOutput.Log.ParentFolderExist",
+              KettleVFS.getFriendlyURI( parentfolder ) ) );
         }
       } else {
         if ( isDetailed() ) {
           logDetailed( BaseMessages.getString( PKG, "TextFileOutput.Log.ParentFolderNotExist",
-            parentfolder.getName() ) );
+              KettleVFS.getFriendlyURI( parentfolder ) ) );
         }
         if ( meta.isCreateParentFolder() ) {
           parentfolder.createFolder();
           if ( isDetailed() ) {
             logDetailed( BaseMessages.getString( PKG, "TextFileOutput.Log.ParentFolderCreated",
-              parentfolder.getName() ) );
+                KettleVFS.getFriendlyURI( parentfolder ) ) );
           }
         } else {
           throw new KettleException( BaseMessages.getString( PKG, "TextFileOutput.Log.ParentFolderNotExistCreateIt",
-              parentfolder.getName(), filename ) );
+              KettleVFS.getFriendlyURI( parentfolder ), KettleVFS.getFriendlyURI( filename ) ) );
         }
       }
     } finally {

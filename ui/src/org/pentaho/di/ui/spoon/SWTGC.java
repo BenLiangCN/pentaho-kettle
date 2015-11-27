@@ -47,6 +47,7 @@ import org.pentaho.di.ui.core.ConstUI;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.gui.GUIResource;
 import org.pentaho.di.ui.util.ImageUtil;
+import org.pentaho.di.ui.util.SwtSvgImageUtil;
 
 public class SWTGC implements GCInterface {
 
@@ -130,6 +131,16 @@ public class SWTGC implements GCInterface {
 
   public void drawLine( int x, int y, int x2, int y2 ) {
     gc.drawLine( x, y, x2, y2 );
+  }
+
+  public void drawImage( String location, ClassLoader classLoader, int x, int y ) {
+    Image img = SwtSvgImageUtil.getImage( PropsUI.getDisplay(), classLoader, location,
+      Math.round( small_icon_size * currentMagnification ),
+      Math.round( small_icon_size * currentMagnification ) );
+    if ( img != null ) {
+      Rectangle bounds = img.getBounds();
+      gc.drawImage( img, 0, 0, bounds.width, bounds.height, x, y, small_icon_size, small_icon_size );
+    }
   }
 
   @Override
@@ -386,11 +397,15 @@ public class SWTGC implements GCInterface {
 
   public void drawStepIcon( int x, int y, StepMeta stepMeta, float magnification ) {
     String steptype = stepMeta.getStepID();
-    Image im =
-        images.get( steptype ).getAsBitmapForSize( gc.getDevice(), Math.round( iconsize * magnification ),
-            Math.round( iconsize * magnification ) );
+    Image im = null;
+    if ( stepMeta.isMissing() ) {
+      im = GUIResource.getInstance().getImageMissing();
+    } else {
+      im =
+          images.get( steptype ).getAsBitmapForSize( gc.getDevice(), Math.round( iconsize * magnification ),
+              Math.round( iconsize * magnification ) );
+    }
     if ( im != null ) { // Draw the icon!
-
       org.eclipse.swt.graphics.Rectangle bounds = im.getBounds();
       gc.drawImage( im, 0, 0, bounds.width, bounds.height, x, y, iconsize, iconsize );
     }
@@ -419,6 +434,9 @@ public class SWTGC implements GCInterface {
         swtImage = GUIResource.getInstance().getImagesJobentries().get( configId );
       }
     }
+    if ( jobEntryCopy.isMissing() ) {
+      swtImage = GUIResource.getInstance().getSwtImageMissing();
+    } 
     if ( image == null ) {
       return;
     }

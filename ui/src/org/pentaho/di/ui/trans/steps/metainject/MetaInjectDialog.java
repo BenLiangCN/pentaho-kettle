@@ -30,7 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.vfs.FileObject;
+import org.apache.commons.vfs2.FileObject;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CCombo;
 import org.eclipse.swt.custom.CTabFolder;
@@ -1351,6 +1351,8 @@ public class MetaInjectDialog extends BaseStepDialog implements StepDialogInterf
     TransMeta newTransMeta = new TransMeta();
 
     newTransMeta.getDatabases().addAll( transMeta.getDatabases() );
+    newTransMeta.setRepository( transMeta.getRepository() );
+    newTransMeta.setRepositoryDirectory( transMeta.getRepositoryDirectory() );
 
     // Pass some interesting settings from the parent transformations...
     //

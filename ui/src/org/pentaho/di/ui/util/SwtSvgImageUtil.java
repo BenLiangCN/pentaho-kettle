@@ -28,8 +28,8 @@ import java.net.URL;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.vfs.FileObject;
-import org.apache.commons.vfs.FileSystemException;
+import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
@@ -195,7 +195,12 @@ public class SwtSvgImageUtil {
    * Internal image loading by ClassLoader.getResourceAsStream.
    */
   private static SwtUniversalImage loadFromClassLoader( Display display, ClassLoader classLoader, String location ) {
-    InputStream s = classLoader.getResourceAsStream( location );
+    InputStream s = null;
+    try {
+      s = classLoader.getResourceAsStream( location );
+    } catch ( Throwable t ) {
+      log.logDebug( "Unable to load image from classloader [" + location + "]" );
+    }
     if ( s == null ) {
       return null;
     }
@@ -211,7 +216,17 @@ public class SwtSvgImageUtil {
    */
   private static SwtUniversalImage loadFromCurrentClasspath( Display display, String location ) {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
-    URL res = cl.getResource( location );
+    if ( cl == null ) {
+      // Can't count on Thread.currentThread().getContextClassLoader() being non-null on Mac
+      // Have to provide some fallback
+      cl = SwtSvgImageUtil.class.getClassLoader();
+    }
+    URL res = null;
+    try {
+      res = cl.getResource( location );
+    } catch ( Throwable t ) {
+      log.logDebug( "Unable to load image from classloader [" + location + "]" );
+    }
     if ( res == null ) {
       return null;
     }

@@ -39,9 +39,9 @@ import java.util.regex.Pattern;
 
 import javax.mail.Flags.Flag;
 
-import org.apache.commons.vfs.FileObject;
-import org.apache.commons.vfs.FileSystemException;
-import org.apache.commons.vfs.FileType;
+import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
+import org.apache.commons.vfs2.FileType;
 import org.pentaho.di.cluster.SlaveServer;
 import org.pentaho.di.core.CheckResultInterface;
 import org.pentaho.di.core.Const;
@@ -727,6 +727,10 @@ public class JobEntryGetPOP extends JobEntryBase implements Cloneable, JobEntryI
     return attachmentfolder;
   }
 
+  public String getRealAttachmentFolder() {
+    return environmentSubstitute( getAttachmentFolder() );
+  }
+
   public void setAttachmentFolder( String foldername ) {
     this.attachmentfolder = foldername;
   }
@@ -1313,13 +1317,13 @@ public class JobEntryGetPOP extends JobEntryBase implements Cloneable, JobEntryI
     String folderName = "";
     switch ( folderType ) {
       case JobEntryGetPOP.FOLDER_OUTPUT:
-        folderName = getOutputDirectory();
+        folderName = getRealOutputDirectory();
         break;
       case JobEntryGetPOP.FOLDER_ATTACHMENTS:
         if ( isSaveAttachment() && isDifferentFolderForAttachment() ) {
-          folderName = getAttachmentFolder();
+          folderName = getRealAttachmentFolder();
         } else {
-          folderName = getOutputDirectory();
+          folderName = getRealOutputDirectory();
         }
         break;
     }
@@ -1348,11 +1352,11 @@ public class JobEntryGetPOP extends JobEntryBase implements Cloneable, JobEntryI
       if ( isDebug() ) {
         switch( folderType ) {
           case JobEntryGetPOP.FOLDER_OUTPUT:
-            throw new KettleException( BaseMessages.getString(
-              PKG, "JobGetMailsFromPOP.Log.OutputFolderExists", folderName ) );
+            logDebug( BaseMessages.getString( PKG, "JobGetMailsFromPOP.Log.OutputFolderExists", folderName ) );
+            break;
           case JobEntryGetPOP.FOLDER_ATTACHMENTS:
-            throw new KettleException( BaseMessages.getString(
-              PKG, "JobGetMailsFromPOP.Log.AttachmentFolderExists", folderName ) );
+            logDebug( BaseMessages.getString( PKG, "JobGetMailsFromPOP.Log.AttachmentFolderExists", folderName ) );
+            break;
         }
       }
     } else {

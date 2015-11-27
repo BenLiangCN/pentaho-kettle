@@ -22,13 +22,13 @@
 
 package org.pentaho.di.core.database;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
+import static org.pentaho.di.core.database.DatabaseMeta.indexOfName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -37,9 +37,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
+import org.pentaho.di.core.RowMetaAndData;
+import org.pentaho.di.core.plugins.DatabasePluginType;
 import org.pentaho.di.core.row.RowMeta;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMeta;
+import org.pentaho.di.core.row.ValueMetaInterface;
 
 public class DatabaseMetaTest {
   @Test
@@ -77,6 +80,31 @@ public class DatabaseMetaTest {
     String expectedJndi = "JNDI";
     String access = DatabaseMeta.getAccessTypeDesc( DatabaseMeta.getAccessType( expectedJndi ) );
     assertEquals( expectedJndi, access );
+  }
+
+  @Test
+  public void testApplyingDefaultOptions() throws Exception {
+    HashMap<String, String> existingOptions = new HashMap<String, String>();
+    existingOptions.put( "type1.extra", "extraValue" );
+    existingOptions.put( "type1.existing", "existingValue" );
+    existingOptions.put( "type2.extra", "extraValue2" );
+
+    HashMap<String, String> newOptions = new HashMap<String, String>();
+    newOptions.put( "type1.new", "newValue" );
+    newOptions.put( "type1.existing", "existingDefault" );
+
+    // Register Natives to create a default DatabaseMeta
+    DatabasePluginType.getInstance().searchPlugins();
+    DatabaseMeta meta = new DatabaseMeta();
+    DatabaseInterface type = mock( DatabaseInterface.class );
+    meta.setDatabaseInterface( type );
+
+    when( type.getExtraOptions() ).thenReturn( existingOptions );
+    when( type.getDefaultOptions() ).thenReturn( newOptions );
+
+    meta.applyDefaultOptions( type );
+    verify( type ).addExtraOption( "type1", "new", "newValue" );
+    verify( type, never() ).addExtraOption( "type1", "existing", "existingDefault" );
   }
 
   @Test
@@ -139,5 +167,45 @@ public class DatabaseMetaTest {
     databaseMeta2.verifyAndModifyDatabaseName( list, null );
 
     assertTrue( !databaseMeta.getDisplayName().equals( databaseMeta2.getDisplayName() ) );
+  }
+
+  @Test
+  public void testGetFeatureSummary() throws Exception {
+    DatabaseMeta databaseMeta = mock( DatabaseMeta.class );
+    OracleDatabaseMeta odbm = new OracleDatabaseMeta();
+    doCallRealMethod().when( databaseMeta ).setDatabaseInterface( any( DatabaseInterface.class ) );
+    doCallRealMethod().when( databaseMeta ).getFeatureSummary();
+    doCallRealMethod().when( databaseMeta ).getAttributes();
+    databaseMeta.setDatabaseInterface( odbm );
+    List<RowMetaAndData> result = databaseMeta.getFeatureSummary();
+    assertNotNull( result );
+    for ( RowMetaAndData rmd : result ) {
+      assertEquals( 2, rmd.getRowMeta().size() );
+      assertEquals( "Parameter", rmd.getRowMeta().getValueMeta( 0 ).getName() );
+      assertEquals( ValueMetaInterface.TYPE_STRING, rmd.getRowMeta().getValueMeta( 0 ).getType() );
+      assertEquals( "Value", rmd.getRowMeta().getValueMeta( 1 ).getName() );
+      assertEquals( ValueMetaInterface.TYPE_STRING, rmd.getRowMeta().getValueMeta( 1 ).getType() );
+    }
+  }
+
+
+  @Test
+  public void indexOfName_NullArray() {
+    assertEquals( -1, indexOfName( null, "" ) );
+  }
+
+  @Test
+  public void indexOfName_NullName() {
+    assertEquals( -1, indexOfName( new String[] { "1" }, null ) );
+  }
+
+  @Test
+  public void indexOfName_ExactMatch() {
+    assertEquals( 1, indexOfName( new String[] { "a", "b", "c" }, "b" ) );
+  }
+
+  @Test
+  public void indexOfName_NonExactMatch() {
+    assertEquals( 1, indexOfName( new String[] { "a", "b", "c" }, "B" ) );
   }
 }
